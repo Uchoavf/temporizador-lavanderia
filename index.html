@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Cronômetro Lavanderia</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 16px 12px 80px;
+      display: flex;
+      justify-content: center;
+    }
+    .container { max-width: 520px; width: 100%; }
+
+    .clock {
+      text-align: center;
+      background: #1a1a2e;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 16px;
+      border: 1px solid #2a2a4a;
+    }
+    .clock .time { font-size: 2.6rem; font-weight: 700; letter-spacing: 2px; color: #fff; }
+    .clock .date { font-size: 0.85rem; color: #8888aa; margin-top: 2px; }
+
+    .card {
+      background: #1a1a2e;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      border: 1px solid #2a2a4a;
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      color: #aaaacc;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card h2 .badge-count { font-size: 0.8rem; font-weight: 400; color: #8888aa; }
+
+    .btn-sm {
+      padding: 6px 12px;
+      border: 1px solid #6c63ff44;
+      border-radius: 8px;
+      background: transparent;
+      color: #6c63ff;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-sm:active { background: #6c63ff22; }
+    .btn-sm.danger { border-color: #ff475744; color: #ff4757; }
+    .btn-sm.danger:active { background: #ff475722; }
+    .btn-sm.success { border-color: #2ed57344; color: #2ed573; }
+    .btn-sm.success:active { background: #2ed57322; }
+
+    .select-full {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #2a2a4a;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      font-size: 1rem;
+      outline: none;
+      margin-bottom: 10px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238888aa' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+    .select-full:focus { border-color: #6c63ff; }
+
+    .input-full {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #2a2a4a;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      font-size: 1rem;
+      outline: none;
+      margin-bottom: 10px;
+    }
+    .input-full:focus { border-color: #6c63ff; }
+
+    .add-row { display: flex; gap: 8px; align-items: center; }
+    .add-row .input-full { margin-bottom: 0; flex: 1; }
+
+    .laundry-actions { display: flex; gap: 6px; margin-bottom: 10px; }
+    .laundry-actions .btn-sm { flex: 1; }
+
+    .machine-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .machine-col { display: flex; flex-direction: column; gap: 8px; }
+    .machine-col h3 {
+      font-size: 0.85rem;
+      color: #8888aa;
+      text-align: center;
+      padding: 4px 0;
+      border-bottom: 1px solid #2a2a4a;
+      margin-bottom: 4px;
+    }
+    .machine-col .empty-state { padding: 10px 0; font-size: 0.8rem; }
+
+    .machine-card {
+      background: #0f0f1a;
+      border: 2px solid #2a2a4a;
+      border-radius: 14px;
+      padding: 14px;
+      transition: border-color 0.2s;
+      position: relative;
+    }
+    .machine-card.running { border-color: #6c63ff; }
+    .machine-card.done { border-color: #2ed573; }
+    .machine-card .mc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .machine-card .mc-info { flex: 1; }
+    .machine-card .mc-name { font-weight: 600; color: #fff; font-size: 1rem; }
+    .machine-card .mc-type { font-size: 0.75rem; color: #8888aa; margin-top: 1px; }
+    .machine-card .mc-del {
+      background: none;
+      border: none;
+      color: #ff4757;
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 0 4px;
+      opacity: 0.5;
+    }
+    .machine-card .mc-del:active { opacity: 1; }
+
+    .mc-timer { text-align: center; padding: 6px 0 10px; }
+    .mc-timer .mc-time {
+      font-size: 2.2rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+    }
+    .mc-timer .mc-time.warning { color: #ff6b6b; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .mc-progress {
+      height: 4px;
+      background: #2a2a4a;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .mc-progress .mc-bar {
+      height: 100%;
+      background: #6c63ff;
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .mc-progress .mc-bar.done { background: #2ed573; }
+
+    .mc-controls { display: flex; gap: 6px; }
+    .mc-controls button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .mc-controls button:active { transform: scale(0.95); }
+    .mc-controls .mc-start { background: #6c63ff; color: #fff; }
+    .mc-controls .mc-stop { background: #ff4757; color: #fff; }
+    .mc-controls .mc-reset { background: #2a2a4a; color: #aaaacc; }
+
+    .machine-type-row { display: flex; gap: 6px; margin-bottom: 10px; }
+    .machine-type-row button {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      background: transparent;
+      color: #aaaacc;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .machine-type-row button.active { border-color: #6c63ff; background: #6c63ff22; color: #6c63ff; }
+    .machine-type-row button:active { transform: scale(0.95); }
+
+    .set-mini-row { display: flex; gap: 4px; justify-content: center; margin-bottom: 6px; flex-wrap: wrap; }
+    .set-mini-row button {
+      padding: 4px 10px;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      background: transparent;
+      color: #8888aa;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+    .set-mini-row button:active { background: #6c63ff22; }
+    .mc-time-set { display: flex; gap: 4px; justify-content: center; align-items: center; }
+    .mc-time-set input {
+      width: 50px;
+      padding: 6px;
+      border-radius: 6px;
+      border: 1px solid #2a2a4a;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      font-size: 0.9rem;
+      text-align: center;
+      outline: none;
+    }
+    .mc-time-set input:focus { border-color: #6c63ff; }
+    .mc-time-set span { color: #8888aa; font-size: 0.75rem; }
+
+    .history-item {
+      background: #0f0f1a;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      border: 1px solid #2a2a4a;
+    }
+    .history-item .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
+    .history-item .name { font-weight: 600; color: #fff; font-size: 0.95rem; }
+    .history-item .laundry-name { font-size: 0.75rem; color: #6c63ff; }
+    .history-item .type-badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #6c63ff22;
+      color: #6c63ff;
+      border: 1px solid #6c63ff44;
+    }
+    .history-item .details { font-size: 0.8rem; color: #8888aa; margin-top: 4px; }
+    .history-item .details span { margin-right: 12px; }
+    .history-item .hist-status[data-status="iniciado"] { color: #6c63ff; }
+    .history-item .hist-status[data-status="completo"] { color: #2ed573; }
+    .history-item .hist-status[data-status="cancelado"] { color: #ff4757; }
+
+    .empty-state { text-align: center; color: #555; padding: 20px 0; font-size: 0.9rem; }
+
+    .btn-clear {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ff475744;
+      border-radius: 10px;
+      background: transparent;
+      color: #ff4757;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: all 0.2s;
+    }
+    .btn-clear:active { background: #ff475722; }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-box {
+      background: #1a1a2e;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 400px;
+      border: 1px solid #2a2a4a;
+    }
+    .modal-box h3 { color: #fff; margin-bottom: 14px; font-size: 1.1rem; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .modal-actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+    .modal-actions .btn-cancel { background: #2a2a4a; color: #aaaacc; }
+    .modal-actions .btn-confirm { background: #6c63ff; color: #fff; }
+    .modal-input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #2a2a4a;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      font-size: 1rem;
+      outline: none;
+      margin: 10px 0;
+    }
+    .modal-input:focus { border-color: #6c63ff; }
+
+    @media (max-width: 400px) {
+      .clock .time { font-size: 2rem; }
+      .mc-timer .mc-time { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="clock">
+    <div class="time" id="clockTime">00:00:00</div>
+    <div class="date" id="clockDate">--</div>
+  </div>
+
+  <div class="card">
+    <h2>Lavanderia <span class="badge-count" id="laundryCount"></span></h2>
+    <select class="select-full" id="laundrySelect"></select>
+    <div class="laundry-actions">
+      <button class="btn-sm" id="btnEditLaundry">Editar</button>
+      <button class="btn-sm danger" id="btnDeleteLaundry">Remover</button>
+    </div>
+    <div class="add-row">
+      <input class="input-full" id="newLaundryInput" type="text" placeholder="Nova lavanderia...">
+      <button class="btn-sm success" id="btnAddLaundry">+</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Máquinas <span class="badge-count" id="machineCount"></span></h2>
+    <div class="machine-list" id="machineList"></div>
+    <div style="margin-top:12px;">
+      <div class="machine-type-row" id="newMachineTypes">
+        <button class="active" data-type="lavadora">Lavadora</button>
+        <button data-type="secadora">Secadora</button>
+      </div>
+      <div class="add-row">
+        <input class="input-full" id="newMachineInput" type="text" placeholder="Nova máquina...">
+        <button class="btn-sm success" id="btnAddMachine">+</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Histórico <span class="badge-count" id="historyCount"></span></h2>
+    <div id="historyList"></div>
+    <button class="btn-clear" id="btnClear">Limpar Histórico</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <h3 id="modalTitle">Confirmar</h3>
+    <p id="modalMessage" style="color:#aaaacc;font-size:0.9rem;"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="modalCancel">Cancelar</button>
+      <button class="btn-confirm" id="modalConfirm">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box">
+    <h3 id="editModalTitle">Editar</h3>
+    <input class="modal-input" id="editModalInput" type="text" placeholder="Novo nome...">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="editModalCancel">Cancelar</button>
+      <button class="btn-confirm" id="editModalConfirm">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
+
+  const STORE = {
+    laundries: 'lav2_laundries',
+    machines: 'lav2_machines',
+    timers: 'lav2_timers',
+    history: 'lav2_history',
+    selected: 'lav2_selected'
+  };
+
+  function getJson(key, def) {
+    try { return JSON.parse(localStorage.getItem(key)) || def; } catch(_) { return def; }
+  }
+  function setJson(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch(_) {}
+  }
+
+  function getLaundries() { return getJson(STORE.laundries, []); }
+  function saveLaundries(v) { setJson(STORE.laundries, v); }
+  function getMachines() { return getJson(STORE.machines, {}); }
+  function saveMachines(v) { setJson(STORE.machines, v); }
+  function getTimers() { return getJson(STORE.timers, {}); }
+  function saveTimers(v) { setJson(STORE.timers, v); }
+  function getHistory() { return getJson(STORE.history, []); }
+  function saveHistory(v) { setJson(STORE.history, v); }
+  function getSelected() { return getJson(STORE.selected, { laundryId: null }); }
+  function saveSelected(v) { setJson(STORE.selected, v); }
+
+  function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  let laundryId = null;
+
+  function fmtTime(sec) {
+    sec = Math.max(0, sec);
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  function fmtDateTime(iso) {
+    return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  let modalCb = null;
+  function showModal(title, msg, cb) {
+    $('#modalTitle').textContent = title;
+    $('#modalMessage').textContent = msg;
+    $('#confirmModal').classList.add('show');
+    modalCb = cb;
+  }
+  $('#modalCancel').addEventListener('click', () => { $('#confirmModal').classList.remove('show'); modalCb = null; });
+  $('#modalConfirm').addEventListener('click', () => {
+    $('#confirmModal').classList.remove('show');
+    if (modalCb) modalCb();
+    modalCb = null;
+  });
+
+  let editCb = null;
+  function showEditModal(title, val, cb) {
+    $('#editModalTitle').textContent = title;
+    $('#editModalInput').value = val;
+    $('#editModal').classList.add('show');
+    editCb = cb;
+    setTimeout(() => $('#editModalInput').focus(), 100);
+  }
+  $('#editModalCancel').addEventListener('click', () => { $('#editModal').classList.remove('show'); editCb = null; });
+  $('#editModalConfirm').addEventListener('click', () => {
+    const v = $('#editModalInput').value.trim();
+    if (!v) return;
+    $('#editModal').classList.remove('show');
+    if (editCb) editCb(v);
+    editCb = null;
+  });
+  $('#editModalInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#editModalConfirm').click(); });
+
+  function updateClock() {
+    const now = new Date();
+    $('#clockTime').textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    $('#clockDate').textContent = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ---- TIMER ENGINE ----
+  function setTimerMinutes(machineId, minutes) {
+    const timers = getTimers();
+    timers[machineId] = { remaining: minutes * 60, total: minutes * 60, running: false };
+    saveTimers(timers);
+  }
+
+  function addHistoryEntry(machineId, status) {
+    const all = getMachines();
+    const machines = all[laundryId] || [];
+    const machine = machines.find(m => m.id === machineId);
+    const laundries = getLaundries();
+    const laundry = laundries.find(l => l.id === laundryId);
+    if (!machine || !laundry) return;
+    const timers = getTimers();
+    const t = timers[machineId];
+    const h = getHistory();
+    h.unshift({
+      id: Date.now(),
+      date: new Date().toISOString(),
+      laundryName: laundry.name,
+      machineName: machine.name,
+      machineType: machine.type,
+      duration: t ? t.total : 0,
+      status: status
+    });
+    if (h.length > 500) h.length = 500;
+    saveHistory(h);
+    renderHistory();
+  }
+
+  function toggleTimer(machineId) {
+    const timers = getTimers();
+    const t = timers[machineId];
+    if (!t) return;
+    if (t.running) {
+      t.running = false;
+      saveTimers(timers);
+      renderMachines();
+      return;
+    }
+    if (t.remaining <= 0) {
+      t.remaining = t.total;
+    }
+    t.running = true;
+    saveTimers(timers);
+    addHistoryEntry(machineId, 'iniciado');
+    renderMachines();
+    ensureTick();
+  }
+
+  function resetMachineTimer(machineId) {
+    const timers = getTimers();
+    const t = timers[machineId];
+    if (!t) return;
+    if (t.running && t.remaining < t.total) {
+      showModal('Resetar Timer', 'Tem certeza? O progresso atual será perdido.', () => {
+        const timers2 = getTimers();
+        const t2 = timers2[machineId];
+        if (t2) {
+          addHistoryEntry(machineId, 'cancelado');
+          t2.running = false;
+          t2.remaining = t2.total;
+          saveTimers(timers2);
+          renderMachines();
+        }
+      });
+      return;
+    }
+    t.running = false;
+    t.remaining = t.total;
+    saveTimers(timers);
+    renderMachines();
+  }
+
+  let globalTick = null;
+  function ensureTick() {
+    if (globalTick) return;
+    globalTick = setInterval(() => {
+      const timers = getTimers();
+      let anyRunning = false;
+
+      for (const mid in timers) {
+        const t = timers[mid];
+        if (!t.running) continue;
+        t.remaining--;
+        if (t.remaining <= 0) {
+          t.remaining = 0;
+          t.running = false;
+          addHistoryEntry(mid, 'completo');
+        } else {
+          anyRunning = true;
+        }
+      }
+
+      saveTimers(timers);
+      renderMachines();
+
+      if (!anyRunning) {
+        clearInterval(globalTick);
+        globalTick = null;
+      }
+    }, 1000);
+  }
+
+  // ---- RENDER ----
+  function renderLaundries() {
+    const list = getLaundries();
+    const sel = $('#laundrySelect');
+    $('#laundryCount').textContent = `(${list.length})`;
+    sel.innerHTML = '<option value="">-- Selecionar lavanderia --</option>'
+      + list.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+    if (laundryId && list.some(l => l.id === laundryId)) {
+      sel.value = laundryId;
+    } else {
+      sel.value = '';
+      laundryId = null;
+    }
+    saveSelected({ laundryId });
+    renderMachines();
+  }
+
+  function renderMachineCard(m, timers) {
+    const t = timers[m.id] || { remaining: 45 * 60, total: 45 * 60 };
+    const pct = t.total > 0 ? (t.remaining / t.total) * 100 : 0;
+    const isLow = t.running && t.remaining < t.total * 0.1;
+    let cardClass = 'machine-card';
+    if (t.running) cardClass += ' running';
+    else if (!t.running && t.remaining <= 0) cardClass += ' done';
+    const typeLabel = { lavadora: 'Lavadora', secadora: 'Secadora', ambos: 'Ambos' };
+
+    return `
+    <div class="${cardClass}" data-id="${m.id}">
+      <div class="mc-header">
+        <div class="mc-info">
+          <div class="mc-name">${esc(m.name)}</div>
+          <div class="mc-type">${typeLabel[m.type] || m.type}</div>
+        </div>
+        <button class="mc-del" data-id="${m.id}">&times;</button>
+      </div>
+      <div class="mc-timer">
+        <div class="mc-time${isLow ? ' warning' : ''}">${fmtTime(t.remaining)}</div>
+      </div>
+      <div class="mc-progress">
+        <div class="mc-bar${!t.running && t.remaining <= 0 ? ' done' : ''}" style="width:${Math.max(0, pct)}%"></div>
+      </div>
+      <div class="set-mini-row" data-id="${m.id}">
+        <button data-minutes="15">15m</button>
+        <button data-minutes="30">30m</button>
+        <button data-minutes="45">45m</button>
+        <button data-minutes="60">60m</button>
+        <button data-minutes="90">90m</button>
+        <button data-minutes="120">120m</button>
+      </div>
+      <div class="mc-time-set">
+        <input type="number" class="mc-custom-min" value="${Math.ceil(t.total / 60)}" min="1" max="999" data-id="${m.id}">
+        <span>min</span>
+      </div>
+      <div class="mc-controls">
+        ${t.running
+          ? `<button class="mc-stop" data-action="toggle" data-id="${m.id}">Pausar</button>`
+          : `<button class="mc-start" data-action="toggle" data-id="${m.id}">Iniciar</button>`
+        }
+        <button class="mc-reset" data-action="reset" data-id="${m.id}">Reset</button>
+      </div>
+    </div>`;
+  }
+
+  function renderMachines() {
+    const list = $('#machineList');
+    const all = getMachines();
+    const machines = laundryId ? (all[laundryId] || []) : [];
+    $('#machineCount').textContent = `(${machines.length})`;
+
+    if (!laundryId) {
+      list.innerHTML = '<div class="empty-state">Selecione uma lavanderia primeiro</div>';
+      return;
+    }
+    if (machines.length === 0) {
+      list.innerHTML = '<div class="empty-state">Nenhuma máquina cadastrada</div>';
+      return;
+    }
+
+    const timers = getTimers();
+    const lavadoras = machines.filter(m => m.type === 'lavadora' || m.type === 'ambos');
+    const secadoras = machines.filter(m => m.type === 'secadora' || m.type === 'ambos');
+
+    list.innerHTML = `
+    <div class="machine-columns">
+      <div class="machine-col">
+        <h3>Lavadoras</h3>
+        ${lavadoras.length ? lavadoras.map(m => renderMachineCard(m, timers)).join('') : '<div class="empty-state">Nenhuma</div>'}
+      </div>
+      <div class="machine-col">
+        <h3>Secadoras</h3>
+        ${secadoras.length ? secadoras.map(m => renderMachineCard(m, timers)).join('') : '<div class="empty-state">Nenhuma</div>'}
+      </div>
+    </div>`;
+  }
+
+  function renderHistory() {
+    const h = getHistory();
+    $('#historyCount').textContent = `(${h.length})`;
+    const list = $('#historyList');
+    if (h.length === 0) {
+      list.innerHTML = '<div class="empty-state">Nenhum uso registrado</div>';
+      return;
+    }
+    const typeLabel = { lavadora: 'Lavadora', secadora: 'Secadora', ambos: 'Ambos' };
+    list.innerHTML = h.map(e => `
+      <div class="history-item">
+        <div class="top">
+          <span class="name">${esc(e.machineName)}</span>
+          <span class="laundry-name">${esc(e.laundryName)}</span>
+          <span class="type-badge">${typeLabel[e.machineType] || e.machineType}</span>
+        </div>
+        <div class="details">
+          <span>${esc(fmtDateTime(e.date))}</span>
+          <span>${esc(fmtTime(e.duration))}</span>
+          <span class="hist-status" data-status="${e.status}">${({iniciado: 'Iniciado', completo: 'Completo', cancelado: 'Cancelado'})[e.status] || e.status}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ---- UI EVENTS ----
+  $('#laundrySelect').addEventListener('change', function() {
+    laundryId = this.value || null;
+    saveSelected({ laundryId });
+    renderMachines();
+  });
+
+  $('#btnAddLaundry').addEventListener('click', function() {
+    const input = $('#newLaundryInput');
+    const name = input.value.trim();
+    if (!name) return;
+    const list = getLaundries();
+    if (list.some(l => l.name.toLowerCase() === name.toLowerCase())) {
+      showModal('Aviso', 'Esta lavanderia já existe.');
+      return;
+    }
+    list.push({ id: genId(), name });
+    saveLaundries(list);
+    input.value = '';
+    laundryId = list[list.length - 1].id;
+    saveSelected({ laundryId });
+    renderLaundries();
+  });
+  $('#newLaundryInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnAddLaundry').click(); });
+
+  function deleteLaundry(id) {
+    if (!id) return;
+    const list = getLaundries();
+    const laundry = list.find(l => l.id === id);
+    if (!laundry) return;
+    showModal('Remover Lavanderia', `Remover "${laundry.name}" e todas as suas máquinas?`, () => {
+      const list2 = getLaundries();
+      const idx = list2.findIndex(l => l.id === id);
+      if (idx > -1) {
+        list2.splice(idx, 1);
+        saveLaundries(list2);
+        const all = getMachines();
+        delete all[id];
+        saveMachines(all);
+        const timers = getTimers();
+        (all[id] || []).forEach(m => delete timers[m.id]);
+        saveTimers(timers);
+        if (laundryId === id) laundryId = null;
+        saveSelected({ laundryId });
+        renderLaundries();
+      }
+    });
+  }
+
+  function editLaundry(id) {
+    if (!id) return;
+    const list = getLaundries();
+    const laundry = list.find(l => l.id === id);
+    if (!laundry) return;
+    showEditModal('Editar Lavanderia', laundry.name, (newName) => {
+      if (list.some(l => l.name.toLowerCase() === newName.toLowerCase() && l.id !== id)) {
+        showModal('Aviso', 'Já existe uma lavanderia com este nome.');
+        return;
+      }
+      laundry.name = newName;
+      saveLaundries(list);
+      renderLaundries();
+    });
+  }
+  $('#btnEditLaundry').addEventListener('click', () => editLaundry(laundryId));
+  $('#btnDeleteLaundry').addEventListener('click', () => deleteLaundry(laundryId));
+
+  $('#machineList').addEventListener('click', function(e) {
+    const delBtn = e.target.closest('.mc-del');
+    if (delBtn) {
+      const mid = delBtn.dataset.id;
+      showModal('Remover Máquina', 'Tem certeza?', () => {
+        const all = getMachines();
+        const machines = all[laundryId] || [];
+        const idx = machines.findIndex(m => m.id === mid);
+        if (idx > -1) {
+          machines.splice(idx, 1);
+          all[laundryId] = machines;
+          saveMachines(all);
+          const timers = getTimers();
+          delete timers[mid];
+          saveTimers(timers);
+          renderMachines();
+        }
+      });
+      return;
+    }
+
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+      const mid = actionBtn.dataset.id;
+      const action = actionBtn.dataset.action;
+      if (action === 'toggle') toggleTimer(mid);
+      else if (action === 'reset') resetMachineTimer(mid);
+      return;
+    }
+  });
+
+  $('#machineList').addEventListener('click', function(e) {
+    const btn = e.target.closest('.set-mini-row button');
+    if (!btn) return;
+    const mid = btn.closest('.set-mini-row').dataset.id;
+    const minutes = parseInt(btn.dataset.minutes);
+    if (mid && minutes) {
+      const timers = getTimers();
+      const t = timers[mid];
+      if (t && t.running) {
+        showModal('Timer ativo', 'Pause o timer antes de mudar o tempo.');
+        return;
+      }
+      setTimerMinutes(mid, minutes);
+      renderMachines();
+    }
+  });
+
+  $('#machineList').addEventListener('input', function(e) {
+    const input = e.target.closest('.mc-custom-min');
+    if (!input) return;
+    const mid = input.dataset.id;
+    let minutes = parseInt(input.value) || 1;
+    if (minutes < 1) minutes = 1;
+    const timers = getTimers();
+    const t = timers[mid];
+    if (t && t.running) return;
+    setTimerMinutes(mid, minutes);
+    renderMachines();
+  });
+
+  const typeBtns = $$('#newMachineTypes button');
+  let newMachineType = 'lavadora';
+  typeBtns.forEach(b => b.addEventListener('click', function() {
+    typeBtns.forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+    newMachineType = this.dataset.type;
+  }));
+
+  $('#btnAddMachine').addEventListener('click', function() {
+    if (!laundryId) {
+      showModal('Aviso', 'Selecione ou crie uma lavanderia primeiro.');
+      return;
+    }
+    const input = $('#newMachineInput');
+    const name = input.value.trim();
+    if (!name) return;
+    const all = getMachines();
+    if (!all[laundryId]) all[laundryId] = [];
+    if (all[laundryId].some(m => m.name.toLowerCase() === name.toLowerCase())) {
+      showModal('Aviso', 'Esta máquina já existe nesta lavanderia.');
+      return;
+    }
+    const mid = genId();
+    all[laundryId].push({ id: mid, name, type: newMachineType });
+    saveMachines(all);
+    const timers = getTimers();
+    timers[mid] = { remaining: 45 * 60, total: 45 * 60 };
+    saveTimers(timers);
+    input.value = '';
+    renderMachines();
+  });
+  $('#newMachineInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnAddMachine').click(); });
+
+  $('#btnClear').addEventListener('click', function() {
+    showModal('Limpar Histórico', 'Tem certeza?', () => {
+      saveHistory([]);
+      renderHistory();
+    });
+  });
+
+  // ---- INIT ----
+  const sel = getSelected();
+  laundryId = sel.laundryId || null;
+
+  const all = getMachines();
+  const timers = getTimers();
+  for (const lid in all) {
+    (all[lid] || []).forEach(m => {
+      if (!timers[m.id]) {
+        timers[m.id] = { remaining: 45 * 60, total: 45 * 60 };
+      }
+    });
+  }
+  saveTimers(timers);
+
+  for (const mid in timers) {
+    if (timers[mid].running) {
+      ensureTick();
+      break;
+    }
+  }
+
+  renderLaundries();
+  renderHistory();
+</script>
+</body>
+</html>
