@@ -224,25 +224,36 @@
     .mc-time-set input:focus { border-color: #6c63ff; }
     .mc-time-set span { color: #8888aa; font-size: 0.75rem; }
 
+    .hist-group { margin-bottom: 16px; }
+    .hist-group:last-child { margin-bottom: 0; }
+    .hist-group-header {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #6c63ff;
+      padding: 6px 0 8px;
+      border-bottom: 1px solid #2a2a4a;
+      margin-bottom: 8px;
+    }
+
     .history-item {
       background: #0f0f1a;
       border-radius: 10px;
-      padding: 12px 14px;
-      margin-bottom: 8px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
       border: 1px solid #2a2a4a;
     }
     .history-item .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px; }
-    .history-item .name { font-weight: 600; color: #fff; font-size: 0.95rem; }
-    .history-item .laundry-name { font-size: 0.75rem; color: #6c63ff; }
+    .history-item .name { font-weight: 600; color: #fff; font-size: 0.9rem; }
+    .history-item .laundry-name { font-size: 0.7rem; color: #6c63ff; }
     .history-item .type-badge {
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       padding: 2px 8px;
       border-radius: 10px;
       background: #6c63ff22;
       color: #6c63ff;
       border: 1px solid #6c63ff44;
     }
-    .history-item .details { font-size: 0.8rem; color: #8888aa; margin-top: 4px; }
+    .history-item .details { font-size: 0.75rem; color: #8888aa; margin-top: 4px; }
     .history-item .details span { margin-right: 12px; }
     .history-item .hist-status[data-status="iniciado"] { color: #6c63ff; }
     .history-item .hist-status[data-status="completo"] { color: #2ed573; }
@@ -668,21 +679,52 @@
       list.innerHTML = '<div class="empty-state">Nenhum uso registrado</div>';
       return;
     }
+
     const typeLabel = { lavadora: 'Lavadora', secadora: 'Secadora', ambos: 'Ambos' };
-    list.innerHTML = h.map(e => `
-      <div class="history-item">
-        <div class="top">
-          <span class="name">${esc(e.machineName)}</span>
-          <span class="laundry-name">${esc(e.laundryName)}</span>
-          <span class="type-badge">${typeLabel[e.machineType] || e.machineType}</span>
-        </div>
-        <div class="details">
-          <span>${esc(fmtDateTime(e.date))}</span>
-          <span>${esc(fmtTime(e.duration))}</span>
-          <span class="hist-status" data-status="${e.status}">${({iniciado: 'Iniciado', completo: 'Completo', cancelado: 'Cancelado'})[e.status] || e.status}</span>
-        </div>
-      </div>
-    `).join('');
+    const statusLabel = { iniciado: 'Iniciado', completo: 'Completo', cancelado: 'Cancelado' };
+
+    const groups = {};
+    for (const e of h) {
+      const d = new Date(e.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(e);
+    }
+
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+    const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+    list.innerHTML = sortedKeys.map(key => {
+      const d = new Date(key + 'T12:00:00');
+      const dayName = dayNames[d.getDay()];
+      const day = d.getDate();
+      const month = monthNames[d.getMonth()];
+      const year = d.getFullYear();
+      const today = new Date();
+      const isToday = key === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const header = isToday ? `Hoje &mdash; ${day} de ${month}` : `${dayName}, ${day} de ${month} de ${year}`;
+
+      return `
+      <div class="hist-group">
+        <div class="hist-group-header">${header}</div>
+        ${groups[key].map(e => `
+          <div class="history-item">
+            <div class="top">
+              <span class="name">${esc(e.machineName)}</span>
+              <span class="laundry-name">${esc(e.laundryName)}</span>
+              <span class="type-badge">${typeLabel[e.machineType] || e.machineType}</span>
+            </div>
+            <div class="details">
+              <span>${esc(fmtDateTime(e.date))}</span>
+              <span>${esc(fmtTime(e.duration))}</span>
+              <span class="hist-status" data-status="${e.status}">${statusLabel[e.status] || e.status}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+    }).join('');
   }
 
   // ---- UI EVENTS ----
