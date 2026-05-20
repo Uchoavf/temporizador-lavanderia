@@ -130,16 +130,38 @@
     .machine-card .mc-info { flex: 1; }
     .machine-card .mc-name { font-weight: 600; color: #fff; font-size: 1rem; }
     .machine-card .mc-type { font-size: 0.75rem; color: #8888aa; margin-top: 1px; }
-    .machine-card .mc-del {
+    .machine-card .mc-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .machine-card .mc-edit, .machine-card .mc-del {
       background: none;
       border: none;
-      color: #ff4757;
-      font-size: 1.2rem;
+      font-size: 1rem;
       cursor: pointer;
-      padding: 0 4px;
-      opacity: 0.5;
+      padding: 2px 6px;
+      opacity: 0.4;
+      transition: opacity 0.2s;
     }
-    .machine-card .mc-del:active { opacity: 1; }
+    .machine-card .mc-edit { color: #6c63ff; font-size: 1.1rem; }
+    .machine-card .mc-del { color: #ff4757; font-size: 1.2rem; }
+    .machine-card:hover .mc-edit, .machine-card:hover .mc-del { opacity: 0.8; }
+    .machine-card .mc-edit:active, .machine-card .mc-del:active { opacity: 1; }
+
+    .btn-reset-all {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ff475744;
+      border-radius: 8px;
+      background: transparent;
+      color: #ff4757;
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: all 0.2s;
+    }
+    .btn-reset-all:active { background: #ff475722; }
 
     .mc-timer { text-align: center; padding: 6px 0 10px; }
     .mc-timer .mc-time {
@@ -341,6 +363,7 @@
   <div class="card">
     <h2>Máquinas <span class="badge-count" id="machineCount"></span></h2>
     <div class="machine-list" id="machineList"></div>
+    <button class="btn-reset-all" id="btnResetAll">Redefinir todas as máquinas</button>
     <div style="margin-top:12px;">
       <div class="machine-type-row" id="newMachineTypes">
         <button class="active" data-type="lavadora">Lavadora</button>
@@ -378,6 +401,23 @@
     <div class="modal-actions">
       <button class="btn-cancel" id="editModalCancel">Cancelar</button>
       <button class="btn-confirm" id="editModalConfirm">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="machineEditModal">
+  <div class="modal-box">
+    <h3 id="machineEditTitle">Editar Máquina</h3>
+    <label style="color:#8888aa;font-size:0.8rem;display:block;margin-bottom:4px;">Nome</label>
+    <input class="modal-input" id="machineEditName" type="text" placeholder="Nome da máquina..." style="margin-top:0;">
+    <label style="color:#8888aa;font-size:0.8rem;display:block;margin:10px 0 4px;">Tipo</label>
+    <div class="machine-type-row" id="machineEditTypes">
+      <button class="active" data-type="lavadora">Lavadora</button>
+      <button data-type="secadora">Secadora</button>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-cancel" id="machineEditCancel">Cancelar</button>
+      <button class="btn-confirm" id="machineEditConfirm">Salvar</button>
     </div>
   </div>
 </div>
@@ -462,6 +502,27 @@
     editCb = null;
   });
   $('#editModalInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#editModalConfirm').click(); });
+
+  let machineEditCb = null;
+  function showMachineEditModal(title, name, type, cb) {
+    $('#machineEditTitle').textContent = title;
+    $('#machineEditName').value = name;
+    $$('#machineEditTypes button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+    $('#machineEditModal').classList.add('show');
+    machineEditCb = cb;
+    setTimeout(() => $('#machineEditName').focus(), 100);
+  }
+  $('#machineEditCancel').addEventListener('click', () => { $('#machineEditModal').classList.remove('show'); machineEditCb = null; });
+  $('#machineEditConfirm').addEventListener('click', () => {
+    const name = $('#machineEditName').value.trim();
+    if (!name) return;
+    const typeBtn = $$('#machineEditTypes button.active');
+    const type = typeBtn.length ? typeBtn[0].dataset.type : 'lavadora';
+    $('#machineEditModal').classList.remove('show');
+    if (machineEditCb) machineEditCb(name, type);
+    machineEditCb = null;
+  });
+  $('#machineEditName').addEventListener('keydown', e => { if (e.key === 'Enter') $('#machineEditConfirm').click(); });
 
   function updateClock() {
     const now = new Date();
@@ -609,7 +670,10 @@
           <div class="mc-name">${esc(m.name)}</div>
           <div class="mc-type">${typeLabel[m.type] || m.type}</div>
         </div>
-        <button class="mc-del" data-id="${m.id}">&times;</button>
+        <div class="mc-actions">
+          <button class="mc-edit" data-id="${m.id}">&#9998;</button>
+          <button class="mc-del" data-id="${m.id}">&times;</button>
+        </div>
       </div>
       <div class="mc-timer">
         <div class="mc-time${isLow ? ' warning' : ''}">${fmtTime(t.remaining)}</div>
@@ -795,17 +859,37 @@
   $('#btnDeleteLaundry').addEventListener('click', () => deleteLaundry(laundryId));
 
   $('#machineList').addEventListener('click', function(e) {
+    const editBtn = e.target.closest('.mc-edit');
+    if (editBtn) {
+      const mid = editBtn.dataset.id;
+      const all = getMachines();
+      const machines = all[laundryId] || [];
+      const machine = machines.find(m => m.id === mid);
+      if (!machine) return;
+      showMachineEditModal('Editar Máquina', machine.name, machine.type, (newName, newType) => {
+        if (machines.some(m => m.name.toLowerCase() === newName.toLowerCase() && m.id !== mid)) {
+          showModal('Aviso', 'Já existe uma máquina com este nome.');
+          return;
+        }
+        machine.name = newName;
+        machine.type = newType;
+        saveMachines(all);
+        renderMachines();
+      });
+      return;
+    }
+
     const delBtn = e.target.closest('.mc-del');
     if (delBtn) {
       const mid = delBtn.dataset.id;
       showModal('Remover Máquina', 'Tem certeza?', () => {
-        const all = getMachines();
-        const machines = all[laundryId] || [];
-        const idx = machines.findIndex(m => m.id === mid);
+        const all2 = getMachines();
+        const machines2 = all2[laundryId] || [];
+        const idx = machines2.findIndex(m => m.id === mid);
         if (idx > -1) {
-          machines.splice(idx, 1);
-          all[laundryId] = machines;
-          saveMachines(all);
+          machines2.splice(idx, 1);
+          all2[laundryId] = machines2;
+          saveMachines(all2);
           const timers = getTimers();
           delete timers[mid];
           saveTimers(timers);
@@ -893,6 +977,36 @@
       saveHistory([]);
       renderHistory();
     });
+  });
+
+  $('#btnResetAll').addEventListener('click', function() {
+    if (!laundryId) return;
+    const timers = getTimers();
+    const all = getMachines();
+    const machines = all[laundryId] || [];
+    let anyRunning = false;
+    for (const m of machines) {
+      const t = timers[m.id];
+      if (t && t.running) { anyRunning = true; break; }
+    }
+    if (anyRunning) {
+      showModal('Redefinir Todas', 'Tem certeza? Máquinas em execução serão resetadas.', () => {
+        const timers2 = getTimers();
+        for (const m of (getMachines()[laundryId] || [])) {
+          const t = timers2[m.id];
+          if (t) { t.running = false; t.remaining = t.total; }
+        }
+        saveTimers(timers2);
+        renderMachines();
+      });
+    } else {
+      for (const m of machines) {
+        const t = timers[m.id];
+        if (t) { t.running = false; t.remaining = t.total; }
+      }
+      saveTimers(timers);
+      renderMachines();
+    }
   });
 
   // ---- INIT ----
