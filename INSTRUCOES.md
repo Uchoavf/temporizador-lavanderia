@@ -17,7 +17,6 @@ Single Page Application (HTML + CSS + JS) para controle de uso de máquinas de l
 ```
 Temporizador de Lavanderia/
   index.html           -> Aplicativo principal
-  copia lavanderia.html -> Cópia de segurança
   INSTRUCOES.md        -> Este arquivo
 ```
 
@@ -27,15 +26,15 @@ Temporizador de Lavanderia/
 Todas as chaves são prefixadas com `lav2_`:
 - `lav2_laundries` -> Array `[{ id, name }]`
 - `lav2_machines` -> Objeto `{ [laundryId]: [{ id, name, type }] }` onde `type` é `'lavadora'` ou `'secadora'`
-- `lav2_timers` -> Objeto `{ [machineId]: { remaining, total, running } }`
+- `lav2_timers` -> Objeto `{ [machineId]: { remaining, total, running, endAt } }`
 - `lav2_history` -> Array `[{ id, date, laundryName, machineName, machineType, duration, status }]` onde `status` é `'iniciado'`, `'completo'` ou `'cancelado'`
 - `lav2_selected` -> `{ laundryId }`
 
 ### Motor de Temporizadores
-- Um único `setInterval` global (1 segundo) gerencia todos os temporizadores
-- Percorre o objeto `timers` e decrementa `remaining` de cada máquina com `running: true`
-- Quando `remaining` chega a 0: registra "completo" no histórico, para o timer
-- Quando não há mais timers rodando, o `setInterval` é limpo
+- Ao iniciar, o timer grava `endAt` (horário de término); o tempo restante é sempre calculado a partir dele, então não perde tempo com tela bloqueada, aba em segundo plano ou página recarregada
+- Um `setInterval` global (500 ms) chama `tick()`: finaliza timers vencidos (de qualquer lavanderia) e atualiza só o texto/barra dos cards em execução
+- Ao terminar: registra "completo" no histórico e dispara alarme (som, vibração e notificação, se permitida)
+- O áudio e a permissão de notificação são liberados no primeiro clique em "Iniciar"
 
 ### Funções principais (JavaScript)
 | Função | Descrição |
@@ -44,7 +43,9 @@ Todas as chaves são prefixadas com `lav2_`:
 | `resetMachineTimer(id)` | Reseta o timer de uma máquina |
 | `setTimerMinutes(id, min)` | Define o tempo total de uma máquina |
 | `addHistoryEntry(id, status)` | Registra evento no histórico |
-| `ensureTick()` | Inicia o loop global de temporizadores |
+| `tick()` / `completeExpired()` | Loop global: finaliza timers vencidos e atualiza a tela |
+| `getRemaining(t)` | Tempo restante calculado a partir de `endAt` |
+| `alertFinished(ids)` | Alarme sonoro, vibração e notificação |
 | `renderMachines()` | Renderiza a lista de máquinas em colunas |
 | `renderHistory()` | Renderiza o histórico |
 | `renderMachineCard(m, timers)` | Renderiza o card de uma máquina |
@@ -54,7 +55,7 @@ Todas as chaves são prefixadas com `lav2_`:
 2. Adiciona **máquinas** com nome e tipo (lavadora/secadora)
 3. Cada máquina exibe seu próprio card com timer, presets e controles
 4. Pode-se iniciar múltiplos timers simultaneamente
-5. Ao iniciar -> histórico registra "Iniciado"
+5. Ao iniciar -> histórico registra "Iniciado" (pausar e retomar não gera nova entrada)
 6. Ao completar -> histórico registra "Completo" + alarme sonoro
 7. Ao resetar enquanto roda -> histórico registra "Cancelado"
 
@@ -67,7 +68,7 @@ Depois acessar `http://SEU_IP:8080` no celular (mesma rede Wi-Fi).
 ## Personalização
 - Para adicionar novos presets de tempo, edite os `<button data-minutes="...">` no HTML
 - Cores e temas podem ser alterados no bloco `<style>`
-- Máquinas do tipo `'ambos'` são suportadas internamente mas removidas da UI
+- O tipo legado `'ambos'` é convertido para `'lavadora'` ao carregar
 
 ## Backup
-O arquivo `copia lavanderia.html` é uma cópia idêntica do `index.html`.
+O histórico do git é o backup do código; os dados do usuário ficam só no `localStorage` do navegador.
