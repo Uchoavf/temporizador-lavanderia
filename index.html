@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cronômetro Lavanderia</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -141,12 +141,12 @@
       font-size: 1rem;
       cursor: pointer;
       padding: 2px 6px;
-      opacity: 0.4;
+      opacity: 0.7;
       transition: opacity 0.2s;
     }
     .machine-card .mc-edit { color: #6c63ff; font-size: 1.1rem; }
     .machine-card .mc-del { color: #ff4757; font-size: 1.2rem; }
-    .machine-card:hover .mc-edit, .machine-card:hover .mc-del { opacity: 0.8; }
+    .machine-card:hover .mc-edit, .machine-card:hover .mc-del { opacity: 1; }
     .machine-card .mc-edit:active, .machine-card .mc-del:active { opacity: 1; }
 
     .btn-reset-all {
@@ -384,7 +384,7 @@
 </div>
 
 <div class="modal-overlay" id="confirmModal">
-  <div class="modal-box">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <h3 id="modalTitle">Confirmar</h3>
     <p id="modalMessage" style="color:#aaaacc;font-size:0.9rem;"></p>
     <div class="modal-actions">
@@ -395,7 +395,7 @@
 </div>
 
 <div class="modal-overlay" id="editModal">
-  <div class="modal-box">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
     <h3 id="editModalTitle">Editar</h3>
     <input class="modal-input" id="editModalInput" type="text" placeholder="Novo nome...">
     <div class="modal-actions">
@@ -406,7 +406,7 @@
 </div>
 
 <div class="modal-overlay" id="machineEditModal">
-  <div class="modal-box">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="machineEditTitle">
     <h3 id="machineEditTitle">Editar Máquina</h3>
     <label style="color:#8888aa;font-size:0.8rem;display:block;margin-bottom:4px;">Nome</label>
     <input class="modal-input" id="machineEditName" type="text" placeholder="Nome da máquina..." style="margin-top:0;">
@@ -533,28 +533,49 @@
   setInterval(updateClock, 1000);
 
   // ---- TIMER ENGINE ----
+  // Cada timer guarda o horario de termino (endAt) enquanto roda; o tempo restante
+  // e sempre calculado a partir dele, entao nao deriva com aba em segundo plano,
+  // tela bloqueada ou pagina recarregada.
+  const DEFAULT_MIN = 45;
+
+  function newTimer(minutes) {
+    return { remaining: minutes * 60, total: minutes * 60, running: false, endAt: null };
+  }
+  function getRemaining(t, now = Date.now()) {
+    if (t.running && t.endAt) return Math.max(0, Math.ceil((t.endAt - now) / 1000));
+    return t.remaining;
+  }
+  function resetTimerObj(t) {
+    t.running = false;
+    t.endAt = null;
+    t.remaining = t.total;
+  }
   function setTimerMinutes(machineId, minutes) {
     const timers = getTimers();
-    timers[machineId] = { remaining: minutes * 60, total: minutes * 60, running: false };
+    timers[machineId] = newTimer(minutes);
     saveTimers(timers);
   }
 
-  function addHistoryEntry(machineId, status) {
+  function findMachine(machineId) {
     const all = getMachines();
-    const machines = all[laundryId] || [];
-    const machine = machines.find(m => m.id === machineId);
-    const laundries = getLaundries();
-    const laundry = laundries.find(l => l.id === laundryId);
-    if (!machine || !laundry) return;
-    const timers = getTimers();
-    const t = timers[machineId];
+    for (const lid in all) {
+      const machine = (all[lid] || []).find(m => m.id === machineId);
+      if (machine) return { machine, laundry: getLaundries().find(l => l.id === lid) };
+    }
+    return null;
+  }
+
+  function addHistoryEntry(machineId, status, timers) {
+    const found = findMachine(machineId);
+    if (!found || !found.laundry) return;
+    const t = (timers || getTimers())[machineId];
     const h = getHistory();
     h.unshift({
-      id: Date.now(),
+      id: genId(),
       date: new Date().toISOString(),
-      laundryName: laundry.name,
-      machineName: machine.name,
-      machineType: machine.type,
+      laundryName: found.laundry.name,
+      machineName: found.machine.name,
+      machineType: found.machine.type,
       duration: t ? t.total : 0,
       status: status
     });
@@ -563,79 +584,141 @@
     renderHistory();
   }
 
+  // ---- ALARME ----
+  let audioCtx = null;
+  function unlockAudio() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (_) {}
+  }
+  function requestNotifyPermission() {
+    try {
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    } catch (_) {}
+  }
+  function playAlarm() {
+    if (!audioCtx) return;
+    try {
+      for (let i = 0; i < 6; i++) {
+        const t0 = audioCtx.currentTime + i * 0.4;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = i % 2 ? 660 : 880;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.4, t0 + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.32);
+      }
+    } catch (_) {}
+  }
+  function alertFinished(machineIds) {
+    playAlarm();
+    try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (_) {}
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        for (const mid of machineIds) {
+          const f = findMachine(mid);
+          if (!f) continue;
+          new Notification('Lavanderia', { body: `${f.machine.name} (${f.laundry ? f.laundry.name : ''}) terminou!` });
+        }
+      }
+    } catch (_) {}
+  }
+
   function toggleTimer(machineId) {
     const timers = getTimers();
     const t = timers[machineId];
     if (!t) return;
     if (t.running) {
+      t.remaining = getRemaining(t);
       t.running = false;
+      t.endAt = null;
       saveTimers(timers);
       renderMachines();
       return;
     }
-    if (t.remaining <= 0) {
-      t.remaining = t.total;
-    }
+    unlockAudio();
+    requestNotifyPermission();
+    const fresh = t.remaining <= 0 || t.remaining >= t.total;
+    if (t.remaining <= 0) t.remaining = t.total;
     t.running = true;
+    t.endAt = Date.now() + t.remaining * 1000;
     saveTimers(timers);
-    addHistoryEntry(machineId, 'iniciado');
+    if (fresh) addHistoryEntry(machineId, 'iniciado', timers);
     renderMachines();
-    ensureTick();
   }
 
   function resetMachineTimer(machineId) {
     const timers = getTimers();
     const t = timers[machineId];
     if (!t) return;
-    if (t.running && t.remaining < t.total) {
+    if (t.running && getRemaining(t) < t.total) {
       showModal('Resetar Timer', 'Tem certeza? O progresso atual será perdido.', () => {
         const timers2 = getTimers();
         const t2 = timers2[machineId];
         if (t2) {
-          addHistoryEntry(machineId, 'cancelado');
-          t2.running = false;
-          t2.remaining = t2.total;
+          addHistoryEntry(machineId, 'cancelado', timers2);
+          resetTimerObj(t2);
           saveTimers(timers2);
           renderMachines();
         }
       });
       return;
     }
-    t.running = false;
-    t.remaining = t.total;
+    resetTimerObj(t);
     saveTimers(timers);
     renderMachines();
   }
 
-  let globalTick = null;
-  function ensureTick() {
-    if (globalTick) return;
-    globalTick = setInterval(() => {
-      const timers = getTimers();
-      let anyRunning = false;
-
-      for (const mid in timers) {
-        const t = timers[mid];
-        if (!t.running) continue;
-        t.remaining--;
-        if (t.remaining <= 0) {
-          t.remaining = 0;
-          t.running = false;
-          addHistoryEntry(mid, 'completo');
-        } else {
-          anyRunning = true;
-        }
+  // Finaliza timers vencidos (mesmo de outras lavanderias ou apos recarregar a pagina).
+  function completeExpired() {
+    const timers = getTimers();
+    const now = Date.now();
+    const done = [];
+    for (const mid in timers) {
+      const t = timers[mid];
+      if (t.running && t.endAt && t.endAt <= now) {
+        t.running = false;
+        t.endAt = null;
+        t.remaining = 0;
+        done.push(mid);
       }
-
+    }
+    if (done.length) {
       saveTimers(timers);
+      done.forEach(mid => addHistoryEntry(mid, 'completo', timers));
+      alertFinished(done);
       renderMachines();
-
-      if (!anyRunning) {
-        clearInterval(globalTick);
-        globalTick = null;
-      }
-    }, 1000);
+    }
+    return timers;
   }
+
+  // Atualiza somente texto/barra dos cards em execucao (sem recriar o HTML).
+  function updateRunning(timers) {
+    const now = Date.now();
+    for (const mid in timers) {
+      const t = timers[mid];
+      if (!t.running) continue;
+      const card = document.querySelector(`.machine-card[data-id="${mid}"]`);
+      if (!card) continue;
+      const rem = getRemaining(t, now);
+      const timeEl = card.querySelector('.mc-time');
+      const barEl = card.querySelector('.mc-bar');
+      timeEl.textContent = fmtTime(rem);
+      timeEl.classList.toggle('warning', rem < t.total * 0.1);
+      barEl.style.width = (t.total > 0 ? (rem / t.total) * 100 : 0) + '%';
+    }
+  }
+
+  function tick() {
+    updateRunning(completeExpired());
+  }
+  setInterval(tick, 500);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 
   // ---- RENDER ----
   function renderLaundries() {
@@ -655,12 +738,13 @@
   }
 
   function renderMachineCard(m, timers) {
-    const t = timers[m.id] || { remaining: 45 * 60, total: 45 * 60 };
-    const pct = t.total > 0 ? (t.remaining / t.total) * 100 : 0;
-    const isLow = t.running && t.remaining < t.total * 0.1;
+    const t = timers[m.id] || newTimer(DEFAULT_MIN);
+    const rem = getRemaining(t);
+    const pct = t.total > 0 ? (rem / t.total) * 100 : 0;
+    const isLow = t.running && rem < t.total * 0.1;
     let cardClass = 'machine-card';
     if (t.running) cardClass += ' running';
-    else if (!t.running && t.remaining <= 0) cardClass += ' done';
+    else if (!t.running && rem <= 0) cardClass += ' done';
     const typeLabel = { lavadora: 'Lavadora', secadora: 'Secadora', ambos: 'Ambos' };
 
     return `
@@ -671,15 +755,15 @@
           <div class="mc-type">${typeLabel[m.type] || m.type}</div>
         </div>
         <div class="mc-actions">
-          <button class="mc-edit" data-id="${m.id}">&#9998;</button>
-          <button class="mc-del" data-id="${m.id}">&times;</button>
+          <button class="mc-edit" data-id="${m.id}" aria-label="Editar ${esc(m.name)}">&#9998;</button>
+          <button class="mc-del" data-id="${m.id}" aria-label="Remover ${esc(m.name)}">&times;</button>
         </div>
       </div>
       <div class="mc-timer">
-        <div class="mc-time${isLow ? ' warning' : ''}">${fmtTime(t.remaining)}</div>
+        <div class="mc-time${isLow ? ' warning' : ''}">${fmtTime(rem)}</div>
       </div>
       <div class="mc-progress">
-        <div class="mc-bar${!t.running && t.remaining <= 0 ? ' done' : ''}" style="width:${Math.max(0, pct)}%"></div>
+        <div class="mc-bar${!t.running && rem <= 0 ? ' done' : ''}" style="width:${Math.max(0, pct)}%"></div>
       </div>
       <div class="set-mini-row" data-id="${m.id}">
         <button data-minutes="15">15m</button>
@@ -719,8 +803,8 @@
     }
 
     const timers = getTimers();
-    const lavadoras = machines.filter(m => m.type === 'lavadora' || m.type === 'ambos');
-    const secadoras = machines.filter(m => m.type === 'secadora' || m.type === 'ambos');
+    const lavadoras = machines.filter(m => m.type !== 'secadora');
+    const secadoras = machines.filter(m => m.type === 'secadora');
 
     list.innerHTML = `
     <div class="machine-columns">
@@ -828,11 +912,11 @@
         list2.splice(idx, 1);
         saveLaundries(list2);
         const all = getMachines();
-        delete all[id];
-        saveMachines(all);
         const timers = getTimers();
         (all[id] || []).forEach(m => delete timers[m.id]);
         saveTimers(timers);
+        delete all[id];
+        saveMachines(all);
         if (laundryId === id) laundryId = null;
         saveSelected({ laundryId });
         renderLaundries();
@@ -926,17 +1010,20 @@
     }
   });
 
-  $('#machineList').addEventListener('input', function(e) {
+  // 'change' (e nao 'input') para nao recriar o campo a cada tecla digitada.
+  $('#machineList').addEventListener('change', function(e) {
     const input = e.target.closest('.mc-custom-min');
     if (!input) return;
     const mid = input.dataset.id;
+    const t = getTimers()[mid];
+    if (t && t.running) { renderMachines(); return; }
     let minutes = parseInt(input.value) || 1;
-    if (minutes < 1) minutes = 1;
-    const timers = getTimers();
-    const t = timers[mid];
-    if (t && t.running) return;
+    minutes = Math.min(999, Math.max(1, minutes));
     setTimerMinutes(mid, minutes);
     renderMachines();
+  });
+  $('#machineList').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.target.closest('.mc-custom-min')) e.target.blur();
   });
 
   const typeBtns = $$('#newMachineTypes button');
@@ -965,7 +1052,7 @@
     all[laundryId].push({ id: mid, name, type: newMachineType });
     saveMachines(all);
     const timers = getTimers();
-    timers[mid] = { remaining: 45 * 60, total: 45 * 60 };
+    timers[mid] = newTimer(DEFAULT_MIN);
     saveTimers(timers);
     input.value = '';
     renderMachines();
@@ -981,58 +1068,65 @@
 
   $('#btnResetAll').addEventListener('click', function() {
     if (!laundryId) return;
-    const timers = getTimers();
-    const all = getMachines();
-    const machines = all[laundryId] || [];
-    let anyRunning = false;
-    for (const m of machines) {
-      const t = timers[m.id];
-      if (t && t.running) { anyRunning = true; break; }
-    }
-    if (anyRunning) {
-      showModal('Redefinir Todas', 'Tem certeza? Máquinas em execução serão resetadas.', () => {
-        const timers2 = getTimers();
-        for (const m of (getMachines()[laundryId] || [])) {
-          const t = timers2[m.id];
-          if (t) { t.running = false; t.remaining = t.total; }
-        }
-        saveTimers(timers2);
-        renderMachines();
-      });
-    } else {
+    const machines = getMachines()[laundryId] || [];
+    const doReset = () => {
+      const timers = getTimers();
       for (const m of machines) {
         const t = timers[m.id];
-        if (t) { t.running = false; t.remaining = t.total; }
+        if (!t) continue;
+        if (t.running && getRemaining(t) < t.total) addHistoryEntry(m.id, 'cancelado', timers);
+        resetTimerObj(t);
       }
       saveTimers(timers);
       renderMachines();
+    };
+    const timers = getTimers();
+    if (machines.some(m => timers[m.id] && timers[m.id].running)) {
+      showModal('Redefinir Todas', 'Tem certeza? Máquinas em execução serão resetadas.', doReset);
+    } else {
+      doReset();
     }
+  });
+
+  // Esc fecha qualquer modal aberto
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    $$('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+    modalCb = editCb = machineEditCb = null;
+  });
+
+  // Mudancas feitas em outra aba
+  window.addEventListener('storage', e => {
+    if (e.key && e.key.startsWith('lav2_')) { renderMachines(); renderHistory(); }
   });
 
   // ---- INIT ----
   const sel = getSelected();
   laundryId = sel.laundryId || null;
 
-  const all = getMachines();
-  const timers = getTimers();
-  for (const lid in all) {
-    (all[lid] || []).forEach(m => {
-      if (!timers[m.id]) {
-        timers[m.id] = { remaining: 45 * 60, total: 45 * 60 };
-      }
-    });
-  }
-  saveTimers(timers);
-
-  for (const mid in timers) {
-    if (timers[mid].running) {
-      ensureTick();
-      break;
+  (function migrate() {
+    const all = getMachines();
+    const timers = getTimers();
+    const now = Date.now();
+    for (const lid in all) {
+      (all[lid] || []).forEach(m => {
+        if (m.type !== 'lavadora' && m.type !== 'secadora') m.type = 'lavadora'; // tipo legado 'ambos'
+        if (!timers[m.id]) timers[m.id] = newTimer(DEFAULT_MIN);
+      });
     }
-  }
+    for (const mid in timers) {
+      const t = timers[mid];
+      // timers salvos pela versao antiga nao tinham endAt
+      if (t.running && !t.endAt) t.endAt = now + t.remaining * 1000;
+      if (!t.running) t.endAt = null;
+    }
+    saveMachines(all);
+    saveTimers(timers);
+  })();
 
   renderLaundries();
   renderHistory();
+  tick();
 </script>
 </body>
 </html>
